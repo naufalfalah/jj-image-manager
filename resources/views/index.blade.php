@@ -158,7 +158,7 @@
                 
                 folderEl.innerHTML = `
                     <span class="folder-name">${domain}</span>
-                    <span class="folder-count">${folder.image_count} images</span>
+                    <span class="folder-count">${folder.image_count ?? 0} images</span>
                 `;
                 
                 folderList.appendChild(folderEl);
@@ -225,8 +225,6 @@
                     const images = response.images;
                     const imageGrid = document.querySelector('.image-grid');
                     
-                    //     ${folder.images.map(img => createImageCard(img)).join('')}
-
                     imageGrid.innerHTML += images.map(createImageCard).join('');
                 },
                 error: function(error) {
@@ -309,7 +307,9 @@
                     console.log('Upload response:', response);
                     if (response.success) {
                         showToast('Images uploaded successfully');
-                        fetchDomainImages(currentFolder);
+                        response.images.forEach(image => {
+                            createImageCard(image)
+                        });
                     } else {
                         showToast('Error uploading images', 'error');
                     }
