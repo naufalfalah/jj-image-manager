@@ -21,7 +21,9 @@ class DomainImageController extends Controller
             return response()->json(['error' => 'Domain not found'], 404);
         }
 
-        $images = DomainImage::where('domain_id', $domain->id)->get();
+        $images = DomainImage::where('domain_id', $domain->id)
+            ->latest()
+            ->get();
 
         return response()->json([
             'success' => true,
@@ -34,7 +36,7 @@ class DomainImageController extends Controller
         $request->validate([
             'domain_name' => 'required|string|max:255',
             'files' => 'required|array',
-            'files.*' => 'image|mimes:jpeg,png,jpg,gif,svg|max:4048', // Adjust max size as needed
+            'files.*' => 'image|mimes:jpeg,png,jpg,gif,svg|max:4096', // 4MB max
         ]);
         
         $domainName = $request->input('domain_name');
@@ -51,12 +53,14 @@ class DomainImageController extends Controller
 
         $domainImages = [];
         foreach ($files as $file) {
-            $imagePath = $file->store('images', 'public');
+            $imagePath = $file->store('images', 's3');
+            $fileUrl = Storage::disk('s3')->url($imagePath);
+            
             $domainImage = DomainImage::create([
                 'domain_id' => $domainId,
                 'name' => $file->getClientOriginalName(),
-                'url' => Storage::disk('public')->url($imagePath),
-                'thumbnail' => Storage::disk('public')->url($imagePath),
+                'url' => $fileUrl,
+                'thumbnail' => $fileUrl,
             ]);
             $domainImages[] = $domainImage;
         }

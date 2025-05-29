@@ -44,8 +44,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.21.1/axios.min.js"></script>
     <script>
         // Configuration
-        const AWS_BUCKET = 'your-s3-bucket-name'; // Replace with your actual S3 bucket
-        const AWS_REGION = 'us-east-1'; // Replace with your bucket region
+        const AWS_BUCKET = '{{ $awsBucket }}'; // Replace with your actual S3 bucket
         
         // State management
         let folders = [];
@@ -283,10 +282,6 @@
                 showToast('No files selected', 'error');
                 return;
             }
-            if (!AWS_BUCKET || !AWS_REGION) {
-                showToast('AWS configuration is missing', 'error');
-                return;
-            }
             if (!currentFolder) {
                 showToast('Please select a domain folder first', 'error');
                 return;
@@ -304,12 +299,17 @@
                 processData: false,
                 contentType: false,
                 success: function(response) {
-                    console.log('Upload response:', response);
                     if (response.success) {
-                        showToast('Images uploaded successfully');
+                        const images = response.images;
+                        const imageGrid = document.querySelector('.image-grid');
                         response.images.forEach(image => {
-                            createImageCard(image)
+                            const imageCardHtml = createImageCard(image);
+                            const tempDiv = document.createElement('div');
+                            tempDiv.innerHTML = imageCardHtml;
+                            const imageCardElement = tempDiv.firstElementChild;
+                            imageGrid.prepend(imageCardElement);
                         });
+                        showToast('Images uploaded successfully');
                     } else {
                         showToast('Error uploading images', 'error');
                     }
@@ -319,39 +319,6 @@
                     showToast('Error uploading images', 'error');
                 }
             });
-
-
-            // const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
-            
-            // if (imageFiles.length === 0) {
-            //     showToast('Please select valid image files', 'error');
-            //     return;
-            // }
-
-            // imageFiles.forEach(file => {
-            //     const reader = new FileReader();
-                
-            //     reader.onload = function(e) {
-            //         const safeFilename = file.name.replace(/\s+/g, '_');
-            //         const s3Url = `https://${AWS_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${currentFolder}/${safeFilename}`;
-                    
-            //         const imageData = {
-            //             id: uploadIdCounter++,
-            //             filename: file.name,
-            //             safeFilename: safeFilename,
-            //             dataUrl: e.target.result,
-            //             s3Url: s3Url,
-            //             size: file.size,
-            //             uploadedAt: new Date().toISOString()
-            //         };
-                    
-            //         folders[currentFolder].images.unshift(imageData);
-            //         renderMainContent();
-            //         showToast(`Image "${file.name}" uploaded successfully`);
-            //     };
-                
-            //     reader.readAsDataURL(file);
-            // });
         }
 
         // Copy URL to clipboard
