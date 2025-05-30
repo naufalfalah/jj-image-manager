@@ -17,7 +17,7 @@ class DomainImageController extends Controller
 
         $domainName = $request->input('domain_name');
         $domain = Domain::where('name', $domainName)->first();
-        if (!$domain) {
+        if (! $domain) {
             return response()->json(['error' => 'Domain not found'], 404);
         }
 
@@ -38,16 +38,16 @@ class DomainImageController extends Controller
             'files' => 'required|array',
             'files.*' => 'image|mimes:jpeg,png,jpg,gif,svg|max:4096', // 4MB max
         ]);
-        
+
         $domainName = $request->input('domain_name');
         $domain = Domain::where('name', $domainName)->first();
-        if (!$domain) {
+        if (! $domain) {
             return response()->json(['error' => 'Domain not found'], 404);
         }
         $domainId = $domain->id;
 
         $files = $request->file('files');
-        if (!$files || count($files) === 0) {
+        if (! $files || count($files) === 0) {
             return response()->json(['error' => 'No files uploaded'], 400);
         }
 

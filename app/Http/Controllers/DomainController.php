@@ -25,9 +25,9 @@ class DomainController extends Controller
         $request->validate([
             'name' => 'required|string|max:255|unique:domains,name',
         ]);
-        
+
         $domainName = $request->input('name');
-        $domain = new Domain();
+        $domain = new Domain;
         $domain->name = $domainName;
         $domain->status = 'active';
         $domain->save();

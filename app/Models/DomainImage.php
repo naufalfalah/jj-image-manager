@@ -10,7 +10,7 @@ class DomainImage extends Model
         'domain_id',
         'name',
         'url',
-        'thumbnail'
+        'thumbnail',
     ];
 
     public function domain()

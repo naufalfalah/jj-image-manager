@@ -8,7 +8,7 @@ class Domain extends Model
 {
     protected $fillable = [
         'name',
-        'status'
+        'status',
     ];
 
     public function images()
