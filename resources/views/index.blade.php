@@ -10,6 +10,10 @@
     <div class="header">
         <div class="header-content">
             <h1>Jome Image Manager</h1>
+            <form method="POST" action="{{ route('logout') }}">
+                @csrf
+                <button type="submit" class="btn btn-danger">Logout</button>
+            </form>
         </div>
     </div>
 
@@ -17,10 +21,10 @@
         <div class="sidebar">
             <h2 class="sidebar-title">Domain Folders</h2>
             <div class="folder-input-group">
-                <input 
-                    type="text" 
-                    class="folder-input" 
-                    id="domainInput" 
+                <input
+                    type="text"
+                    class="folder-input"
+                    id="domainInput"
                     name="name"
                     placeholder="Enter domain name"
                     onkeypress="handleKeyPress(event)"
@@ -45,7 +49,7 @@
     <script>
         // Configuration
         const AWS_BUCKET = '{{ $awsBucket }}'; // Replace with your actual S3 bucket
-        
+
         // State management
         let folders = [];
         let currentFolder = null;
@@ -82,7 +86,7 @@
         function createDomain() {
             const input = document.getElementById('domainInput');
             const domain = input.value.trim();
-            
+
             if (!domain) {
                 showToast('Please enter a domain name', 'error');
                 return;
@@ -120,7 +124,7 @@
         function createFolder() {
             const input = document.getElementById('domainInput');
             const domain = input.value.trim();
-            
+
             if (!domain) {
                 showToast('Please enter a domain name', 'error');
                 return;
@@ -154,12 +158,12 @@
                 const folderEl = document.createElement('div');
                 folderEl.className = `folder-item ${currentFolder === domain ? 'active' : ''}`;
                 folderEl.onclick = () => selectFolder(domain);
-                
+
                 folderEl.innerHTML = `
                     <span class="folder-name">${domain}</span>
                     <span class="folder-count">${folder.image_count ?? 0} images</span>
                 `;
-                
+
                 folderList.appendChild(folderEl);
             });
         }
@@ -174,7 +178,7 @@
         // Render main content area
         function renderMainContent() {
             const mainContent = document.getElementById('mainContent');
-            
+
             if (!currentFolder) {
                 mainContent.innerHTML = `
                     <div class="welcome-message">
@@ -186,24 +190,24 @@
             }
 
             const folder = folders.find(f => f.name === currentFolder);
-            
+
             mainContent.innerHTML = `
-                <div class="upload-area" id="uploadArea" 
-                     ondrop="handleDrop(event)" 
-                     ondragover="handleDragOver(event)" 
+                <div class="upload-area" id="uploadArea"
+                     ondrop="handleDrop(event)"
+                     ondragover="handleDragOver(event)"
                      ondragleave="handleDragLeave(event)">
                     <h3 class="upload-title">Upload Images to ${currentFolder}</h3>
                     <p class="upload-subtitle">Drag and drop images here or click to select</p>
-                    <input type="file" id="fileInput" class="file-input" 
+                    <input type="file" id="fileInput" class="file-input"
                            accept="image/*" multiple onchange="handleFileSelect(event)">
                     <label for="fileInput" class="choose-images-btn">Choose Images</label>
                     <p class="s3-info">Images will be uploaded to: s3://${AWS_BUCKET}/${currentFolder}/</p>
                 </div>
-                
+
                 <div class="images-section">
                     <h3 class="section-title">Uploaded Images</h3>
                 </div>
-                ${folder.images_count === 0 ? 
+                ${folder.images_count === 0 ?
                     '<div class="empty-images">No images uploaded yet</div>' : ''
                 }
                 <div class="image-grid">
@@ -223,7 +227,7 @@
                 success: function(response) {
                     const images = response.images;
                     const imageGrid = document.querySelector('.image-grid');
-                    
+
                     imageGrid.innerHTML += images.map(createImageCard).join('');
                 },
                 error: function(error) {
@@ -272,7 +276,7 @@
             event.preventDefault();
             event.stopPropagation();
             document.getElementById('uploadArea').classList.remove('dragover');
-            
+
             const files = event.dataTransfer.files;
             processFiles(files);
         }
@@ -329,22 +333,22 @@
             textarea.style.position = 'absolute';
             textarea.style.left = '-9999px';
             document.body.appendChild(textarea);
-            
+
             // Select and copy
             textarea.select();
             document.execCommand('copy');
             document.body.removeChild(textarea);
-            
+
             // Update button state
             const originalText = button.textContent;
             button.textContent = 'Copied!';
             button.classList.add('copied');
-            
+
             setTimeout(() => {
                 button.textContent = originalText;
                 button.classList.remove('copied');
             }, 2000);
-            
+
             showToast('URL copied to clipboard', 'success');
         }
 
@@ -354,7 +358,7 @@
             toast.textContent = message;
             toast.className = `toast ${type}`;
             toast.classList.add('show');
-            
+
             setTimeout(() => {
                 toast.classList.remove('show');
             }, 3000);

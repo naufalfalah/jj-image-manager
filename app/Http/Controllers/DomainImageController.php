@@ -55,7 +55,7 @@ class DomainImageController extends Controller
         foreach ($files as $file) {
             $imagePath = $file->store('images', 's3');
             $fileUrl = Storage::disk('s3')->url($imagePath);
-            
+
             $domainImage = DomainImage::create([
                 'domain_id' => $domainId,
                 'name' => $file->getClientOriginalName(),
