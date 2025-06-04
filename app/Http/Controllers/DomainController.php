@@ -38,4 +38,21 @@ class DomainController extends Controller
             'domain' => $domain,
         ]);
     }
+
+    public function destroy($id)
+    {
+        $domain = Domain::find($id);
+        if (!$domain) {
+            return response()->json([
+                'error' => 'Domain not found'
+            ], 404);
+        }
+
+        $domain->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Domain deleted successfully',
+        ]);
+    }
 }

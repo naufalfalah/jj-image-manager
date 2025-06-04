@@ -175,6 +175,25 @@
             renderMainContent();
         }
 
+        function deleteFolder(domainId, domain) {
+            if (!confirm(`Are you sure you want to delete the folder "${domain}"?`)) return;
+
+            $.ajax({
+                url: `/api/domains/${domainId}`,
+                method: 'DELETE',
+                success: function(response) {
+                    currentFolder = null;
+                    fetchDomains();
+                    renderMainContent();
+                    showToast(`Folder deleted successfully`);
+                },
+                error: function(error) {
+                    console.error('Error deleting folder:', error);
+                    showToast('Error deleting folder', 'error');
+                }
+            });
+        }
+
         // Render main content area
         function renderMainContent() {
             const mainContent = document.getElementById('mainContent');
@@ -192,9 +211,13 @@
             const folder = folders.find(f => f.name === currentFolder);
 
             mainContent.innerHTML = `
-                <div class="upload-area" id="uploadArea"
-                     ondrop="handleDrop(event)"
-                     ondragover="handleDragOver(event)"
+                <div class="folder-header">
+                    <h2 class="folder-title">${currentFolder}</h2>
+                    <button class="delete-folder-btn" onclick="deleteFolder(${folder.id}, '${currentFolder}')">Delete Folder</button>
+                </div>
+                <div class="upload-area" id="uploadArea" 
+                     ondrop="handleDrop(event)" 
+                     ondragover="handleDragOver(event)" 
                      ondragleave="handleDragLeave(event)">
                     <h3 class="upload-title">Upload Images to ${currentFolder}</h3>
                     <p class="upload-subtitle">Drag and drop images here or click to select</p>
@@ -248,6 +271,12 @@
                         <button class="copy-btn" onclick="copyUrl('${image.url}', this)">
                             Copy URL
                         </button>
+                        <button class="edit-btn" onclick="editImage(${image.id})">
+                            Edit
+                        </button>
+                        <button class="delete-btn" onclick="deleteImage(${image.id}, this)">
+                            Delete
+                        </button>
                     </div>
                 </div>
             `;
@@ -286,10 +315,6 @@
                 showToast('No files selected', 'error');
                 return;
             }
-            if (!currentFolder) {
-                showToast('Please select a domain folder first', 'error');
-                return;
-            }
 
             const formData = new FormData();
             Array.from(files).forEach(file => {
@@ -321,6 +346,60 @@
                 error: function(error) {
                     console.error('Error uploading images:', error);
                     showToast('Error uploading images', 'error');
+                }
+            });
+        }
+
+        function editImage(imageId) {
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = 'image/*';
+            fileInput.onchange = function(event) {
+                const files = event.target.files;
+                if (!files || files.length === 0) {
+                    showToast('No file selected', 'error');
+                    return;
+                }
+                const formData = new FormData();
+                formData.append('files[]', files[0]);
+                
+                $.ajax({
+                    url: `/api/domains/images/${imageId}`,
+                    method: 'POST',
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    success: function(response) {
+                        if (response.success) {
+                            const imageGrid = document.querySelector('.image-grid');
+                            imageGrid.innerHTML = '';
+                            fetchDomainImages(currentFolder);
+                            showToast('Image updated successfully. Thumbnails refresh will take a moment.');
+                        } else {
+                            showToast('Error uploading images', 'error');
+                        }
+                    },
+                    error: function(error) {
+                        showToast('Error updating image', 'error');
+                    }
+                });
+            };
+            fileInput.click();
+        }
+
+        function deleteImage(imageId, btn) {
+            if (!confirm('Are you sure you want to delete this image?')) return;
+
+            $.ajax({
+                url: `/api/domains/images/${imageId}`,
+                method: 'DELETE',
+                success: function(response) {
+                    showToast('Image deleted successfully');
+                    const card = btn.closest('.image-card');
+                    if (card) card.remove();
+                },
+                error: function(error) {
+                    showToast('Error deleting image', 'error');
                 }
             });
         }
