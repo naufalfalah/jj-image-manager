@@ -41,7 +41,9 @@ class DomainController extends Controller
             'name' => 'required|string|min:4|max:60|unique:domains,name',
         ]);
 
-        $domainName = $request->input('name');
+        // Replace dots with dashes in the domain name
+        $domainName = str_replace('.', '-', $request->input('name'));
+        
         $domain = new Domain;
         $domain->name = $domainName;
         $domain->status = 'active';

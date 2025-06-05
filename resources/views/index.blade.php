@@ -42,6 +42,17 @@
         </div>
     </div>
 
+    <div id="copyMoveModal" style="display:none; position:fixed; left:0; top:0; width:100vw; height:100vh; background:rgba(0,0,0,0.3); z-index:9999; align-items:center; justify-content:center;">
+        <div style="background:#fff; padding:24px; border-radius:8px; min-width:300px;">
+            <h3 id="copyMoveTitle"></h3>
+            <select id="targetDomainSelect"></select>
+            <div style="margin-top:16px; text-align:right;">
+                <button onclick="closeCopyMoveModal()">Cancel</button>
+                <button id="copyMoveActionBtn">OK</button>
+            </div>
+        </div>
+    </div>
+
     <div class="toast" id="toast"></div>
 
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -104,15 +115,20 @@
                 method: 'POST',
                 data: { name: domain },
                 success: function(response) {
-                    folders.push({
-                        name: domain,
-                        images: [],
-                        createdAt: new Date().toISOString()
-                    });
-                    input.value = '';
-                    renderFolders();
-                    selectFolder(domain);
-                    showToast(`Folder "${domain}" created successfully`);
+                    if (response.success) {
+                        folders.push({
+                            name: response.domain.name,
+                            images: [],
+                            createdAt: new Date().toISOString()
+                        });
+                        input.value = '';
+                        renderFolders();
+                        selectFolder(domain);
+                        showToast(`Folder "${domain}" created successfully`);
+                    } else {
+                        showToast('Error creating folder', 'error');
+                        return;
+                    }   
                 },
                 error: function(error) {
                     console.error('Error creating folder:', error);
@@ -163,6 +179,7 @@
                 folderEl.innerHTML = `
                     <span class="folder-name">${domain}</span>
                     <span class="folder-count">${folder.image_count ?? 0} images</span>
+                    <button class="edit-folder-btn" onclick="editFolder(event, '${domain}', ${folder.id})" title="Rename Folder">✏️</button>
                 `;
 
                 folderList.appendChild(folderEl);
@@ -295,12 +312,22 @@
                         <button class="copy-btn" onclick="copyUrl('${image.url}', this)">
                             Copy URL
                         </button>
-                        <button class="edit-btn" onclick="editImage(${image.id})">
-                            Edit
-                        </button>
-                        <button class="delete-btn" onclick="deleteImage(${image.id}, this)">
-                            Delete
-                        </button>
+                        <div class="button-group">
+                            <button class="edit-btn" onclick="editImage(${image.id})">
+                                Edit
+                            </button>
+                            <button class="delete-btn" onclick="deleteImage(${image.id}, this)">
+                                Delete
+                            </button>
+                        </div>
+                        <div class="button-group">
+                            <button class="copy-image-btn" onclick="showCopyMoveModal(${image.id}, 'copy')">
+                                Copy Image
+                            </button>
+                            <button class="move-image-btn" onclick="showCopyMoveModal(${image.id}, 'move', this)">
+                                Move Image
+                            </button>
+                        </div>
                     </div>
                 </div>
             `;
@@ -345,32 +372,56 @@
                 formData.append('files[]', file);
             });
             formData.append('domain_name', currentFolder);
-            $.ajax({
-                url: '/api/domains/images',
-                method: 'POST',
-                data: formData,
-                processData: false,
-                contentType: false,
-                success: function(response) {
-                    if (response.success) {
-                        const images = response.images;
-                        const imageGrid = document.querySelector('.image-grid');
-                        response.images.forEach(image => {
-                            const imageCardHtml = createImageCard(image);
-                            const tempDiv = document.createElement('div');
-                            tempDiv.innerHTML = imageCardHtml;
-                            const imageCardElement = tempDiv.firstElementChild;
-                            imageGrid.prepend(imageCardElement);
-                        });
-                        showToast('Images uploaded successfully');
-                    } else {
-                        showToast('Error uploading images', 'error');
+
+            let progressBar = document.getElementById('uploadProgressBar');
+            if (!progressBar) {
+                progressBar = document.createElement('div');
+                progressBar.id = 'uploadProgressBar';
+                progressBar.style.width = '0%';
+                progressBar.style.height = '6px';
+                progressBar.style.background = '#38bdf8';
+                progressBar.style.transition = 'width 0.2s';
+                progressBar.style.marginBottom = '10px';
+                document.getElementById('uploadArea').prepend(progressBar);
+            }
+
+            axios.post('/api/domains/images', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+                onUploadProgress: function(progressEvent) {
+                    if (progressEvent.lengthComputable) {
+                        const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                        progressBar.style.width = percent + '%';
                     }
-                },
-                error: function(error) {
-                    console.error('Error uploading images:', error);
+                }
+            })
+            .then(function(response) {
+                progressBar.style.width = '100%';
+                setTimeout(() => progressBar.remove(), 800);
+
+                if (response.data.success) {
+                    const images = response.data.images;
+                    const imageGrid = document.querySelector('.image-grid');
+                    images.forEach(image => {
+                        const imageCardHtml = createImageCard(image);
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = imageCardHtml;
+                        const imageCardElement = tempDiv.firstElementChild;
+                        imageGrid.prepend(imageCardElement);
+                    });
+
+                    const folder = folders.find(f => f.name === currentFolder);
+                    if (folder) {
+                        folder.image_count = (folder.image_count || 0) + images.length;
+                        renderFolders();
+                    }
+                    showToast('Images uploaded successfully');
+                } else {
                     showToast('Error uploading images', 'error');
                 }
+            })
+            .catch(function(error) {
+                progressBar.remove();
+                showToast('Error uploading images', 'error');
             });
         }
 
@@ -421,9 +472,73 @@
                     showToast('Image deleted successfully');
                     const card = btn.closest('.image-card');
                     if (card) card.remove();
+                    
+                    const folder = folders.find(f => f.name === currentFolder);
+                    if (folder && folder.image_count > 0) {
+                        folder.image_count -= 1;
+                        renderFolders();
+                    }
                 },
                 error: function(error) {
                     showToast('Error deleting image', 'error');
+                }
+            });
+        }
+
+        let currentCopyMoveImageId = null;
+        let currentCopyMoveAction = null;
+        let currentImageCard = null;
+
+        function showCopyMoveModal(imageId, action, btn = null) {
+            currentCopyMoveImageId = imageId;
+            currentCopyMoveAction = action;
+            currentImageCard = btn ? btn.closest('.image-card') : null;
+            document.getElementById('copyMoveTitle').textContent = (action === 'copy' ? 'Copy' : 'Move') + ' Image to Domain';
+            const select = document.getElementById('targetDomainSelect');
+            select.innerHTML = folders
+                .filter(f => f.name !== currentFolder)
+                .map(f => `<option value="${f.name}">${f.name}</option>`)
+                .join('');
+            document.getElementById('copyMoveModal').style.display = 'flex';
+            document.getElementById('copyMoveActionBtn').onclick = doCopyMoveImage;
+        }
+
+        function closeCopyMoveModal() {
+            document.getElementById('copyMoveModal').style.display = 'none';
+        }
+
+        function doCopyMoveImage() {
+            const targetDomain = document.getElementById('targetDomainSelect').value;
+            if (!targetDomain) return;
+
+            $.ajax({
+                url: `/api/domains/images/${currentCopyMoveImageId}/${currentCopyMoveAction}`,
+                method: 'POST',
+                data: { target_domain_name: targetDomain },
+                success: function(response) {
+                    closeCopyMoveModal();
+                    showToast(`Image ${currentCopyMoveAction}d successfully`);
+                    
+                    // Refresh image grid & sidebar count
+                    if (currentCopyMoveAction === 'move') {
+                        const folder = folders.find(f => f.name === currentFolder);
+                        if (folder && folder.image_count > 0) {
+                            folder.image_count -= 1;
+                            renderFolders();
+                        }
+                        const card = currentImageCard.closest('.image-card');
+                        if (card) card.remove();
+                    }
+
+                    const targetFolder = folders.find(f => f.name === targetDomain);
+                    if (targetFolder) {
+                        targetFolder.image_count = (targetFolder.image_count || 0) + 1;
+                        renderFolders();
+                    }
+                },
+                error: function(error) {
+                    closeCopyMoveModal();
+                    showToast(`Failed to ${currentCopyMoveAction} image`, 'error');
                 }
             });
         }

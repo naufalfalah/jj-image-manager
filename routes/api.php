@@ -13,3 +13,5 @@ Route::get('/domains/images', [DomainImageController::class, 'index']);
 Route::post('/domains/images', [DomainImageController::class, 'store']);
 Route::post('/domains/images/{id}', [DomainImageController::class, 'update']);
 Route::delete('/domains/images/{id}', [DomainImageController::class, 'destroy']);
+Route::post('/domains/images/{id}/copy', [DomainImageController::class, 'copy']);
+Route::post('/domains/images/{id}/move', [DomainImageController::class, 'move']);

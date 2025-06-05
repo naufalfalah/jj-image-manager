@@ -203,4 +203,124 @@ class DomainImageController extends Controller
             'message' => 'Image deleted successfully',
         ]);
     }
+
+    public function copy(Request $request, $id)
+    {
+        $request->validate([
+            'target_domain_name' => 'required|string|max:255',
+        ]);
+
+        $domainImage = DomainImage::find($id);
+        if (! $domainImage) {
+            return response()->json(['error' => 'Image not found'], 404);
+        }
+
+        $sourceDomain = Domain::find($domainImage->domain_id);
+        if (! $sourceDomain) {
+            return response()->json(['error' => 'Source domain not found'], 404);
+        }
+        $sourceBucketName = strtolower($sourceDomain->name);
+
+        $targetDomainName = $request->input('target_domain_name');
+        $targetDomain = Domain::where('name', $targetDomainName)->first();
+        if (! $targetDomain) {
+            return response()->json(['error' => 'Target domain not found'], 404);
+        }
+        $targetBucketName = strtolower($targetDomain->name);
+
+        // Parse the URL to get the key
+        $parsed = parse_url($domainImage->url);
+        $key = isset($parsed['path']) ? ltrim($parsed['path'], '/') : null;
+        if ($key && strpos($key, $sourceBucketName.'/') === 0) {
+            $key = substr($key, strlen($sourceBucketName) + 1);
+        }
+
+        // Copy the image in S3
+        try {
+            if ($key) {
+                $this->s3->copyObject([
+                    'Bucket' => $targetBucketName,
+                    'CopySource' => "{$sourceBucketName}/{$key}",
+                    'Key' => "images/{$domainImage->name}",
+                ]);
+            }
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to copy image: '.$e->getMessage()], 500);
+        }
+
+        // Create a new DomainImage record for the copied image
+        $copiedImage = DomainImage::create([
+            'domain_id' => $targetDomain->id,
+            'name' => $domainImage->name,
+            'url' => "https://{$targetBucketName}.s3.amazonaws.com/images/{$domainImage->name}",
+            'thumbnail' => "https://{$targetBucketName}.s3.amazonaws.com/images/{$domainImage->name}",
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Image copied successfully',
+            'image' => $copiedImage,
+        ]);
+    }
+
+    public function move(Request $request, $id)
+    {
+        $request->validate([
+            'target_domain_name' => 'required|string|max:255',
+        ]);
+
+        $domainImage = DomainImage::find($id);
+        if (! $domainImage) {
+            return response()->json(['error' => 'Image not found'], 404);
+        }
+
+        $sourceDomain = Domain::find($domainImage->domain_id);
+        if (! $sourceDomain) {
+            return response()->json(['error' => 'Source domain not found'], 404);
+        }
+        $sourceBucketName = strtolower($sourceDomain->name);
+
+        $targetDomainName = $request->input('target_domain_name');
+        $targetDomain = Domain::where('name', $targetDomainName)->first();
+        if (! $targetDomain) {
+            return response()->json(['error' => 'Target domain not found'], 404);
+        }
+        $targetBucketName = strtolower($targetDomain->name);
+
+        // Parse the URL to get the key
+        $parsed = parse_url($domainImage->url);
+        $key = isset($parsed['path']) ? ltrim($parsed['path'], '/') : null;
+        if ($key && strpos($key, $sourceBucketName.'/') === 0) {
+            $key = substr($key, strlen($sourceBucketName) + 1);
+        }
+
+        // Move the image in S3
+        try {
+            if ($key) {
+                $this->s3->copyObject([
+                    'Bucket' => $targetBucketName,
+                    'CopySource' => "{$sourceBucketName}/{$key}",
+                    'Key' => "images/{$domainImage->name}",
+                ]);
+                $this->s3->deleteObject([
+                    'Bucket' => $sourceBucketName,
+                    'Key' => $key,
+                ]);
+            }
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to move image: '.$e->getMessage()], 500);
+        }
+
+        // Update the DomainImage record to point to the new domain
+        $domainImage->domain_id = $targetDomain->id;
+        $domainImage->url = "https://{$targetBucketName}.s3.amazonaws.com/images/{$domainImage->name}";
+        $domainImage->thumbnail = "https://{$targetBucketName}.s3.amazonaws.com/images/{$domainImage->name}";
+        $domainImage->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Image moved successfully',
+            'image' => $domainImage,
+        ]);
+    }
 }
