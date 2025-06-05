@@ -117,6 +117,19 @@ body {
     background: #4f46e5;
 }
 
+.edit-folder-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    margin-left: 8px;
+    font-size: 16px;
+    color: #888;
+    transition: color 0.2s;
+}
+.edit-folder-btn:hover {
+    color: #f59e0b;
+}
+
 .delete-folder-btn {
     padding: 10px 16px;
     background: #f16363;

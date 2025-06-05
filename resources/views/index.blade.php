@@ -48,7 +48,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.21.1/axios.min.js"></script>
     <script>
         // Configuration
-        const AWS_BUCKET = '{{ $awsBucket }}'; // Replace with your actual S3 bucket
+        const AWS_BUCKET = '{{ $awsBucket }}';
+        const AWS_REGION = '{{ $awsRegion }}';
 
         // State management
         let folders = [];
@@ -175,6 +176,29 @@
             renderMainContent();
         }
 
+        function editFolder(event, oldDomain, domainId) {
+            event.stopPropagation();
+            const newDomain = prompt('Rename folder:', oldDomain);
+            if (!newDomain || newDomain === oldDomain) return;
+
+            $.ajax({
+                url: `/api/domains/${domainId}`,
+                method: 'PUT',
+                data: { name: newDomain },
+                success: function(response) {
+                    showToast('Folder renamed successfully');
+                    fetchDomains();
+                    if (currentFolder === oldDomain) {
+                        currentFolder = newDomain;
+                        renderMainContent();
+                    }
+                },
+                error: function(error) {
+                    showToast('Error renaming folder', 'error');
+                }
+            });
+        }
+
         function deleteFolder(domainId, domain) {
             if (!confirm(`Are you sure you want to delete the folder "${domain}"?`)) return;
 
@@ -224,7 +248,7 @@
                     <input type="file" id="fileInput" class="file-input"
                            accept="image/*" multiple onchange="handleFileSelect(event)">
                     <label for="fileInput" class="choose-images-btn">Choose Images</label>
-                    <p class="s3-info">Images will be uploaded to: s3://${AWS_BUCKET}/${currentFolder}/</p>
+                    <p class="s3-info">Images will be uploaded to: https:///${currentFolder}.s3.${AWS_REGION}.amazon.aws.com/images/</p>
                 </div>
 
                 <div class="images-section">
