@@ -199,10 +199,14 @@
                 folderEl.onclick = () => selectFolder(domain);
 
                 folderEl.innerHTML = `
-                    <span class="folder-name">${domain}</span>
-                    <span class="folder-count">${folder.image_count ?? 0} images</span>
-                    <button class="edit-folder-btn" onclick="editFolder(event, '${domain}', ${folder.id})" title="Rename Folder">✏️</button>
-                    <button class="clone-folder-btn" onclick="showCloneDomainModal(${folder.id}, '${domain}')">🗐</button>
+                    <div class="folder-row-1">
+                        <span class="folder-name" title="${domain}">${domain}</span>
+                    </div>
+                    <div class="folder-row-2">
+                        <span class="folder-count">${folder.image_count ?? 0} images</span>
+                        <button class="edit-folder-btn" onclick="editFolder(event, '${domain}', ${folder.id})" title="Rename Folder">✏️</button>
+                        <button class="clone-folder-btn" onclick="showCloneDomainModal(${folder.id}, '${domain}')">🗐</button>
+                    </div>
                 `;
 
                 folderList.appendChild(folderEl);
@@ -332,7 +336,6 @@
                 return;
             }
 
-            console.log('Rendering main content for folder:', currentFolder);
             const folder = folders.find(f => f.name === currentFolder);
 
             mainContent.innerHTML = `
