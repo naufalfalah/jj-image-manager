@@ -8,6 +8,7 @@ Route::get('/domains', [DomainController::class, 'index']);
 Route::post('/domains', [DomainController::class, 'store']);
 Route::put('/domains/{id}', [DomainController::class, 'update']);
 Route::delete('/domains/{id}', [DomainController::class, 'destroy']);
+Route::post('/domains/{id}/clone', [DomainController::class, 'clone']);
 
 Route::get('/domains/images', [DomainImageController::class, 'index']);
 Route::post('/domains/images', [DomainImageController::class, 'store']);

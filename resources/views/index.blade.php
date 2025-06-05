@@ -42,8 +42,30 @@
         </div>
     </div>
 
-    <div id="copyMoveModal" style="display:none; position:fixed; left:0; top:0; width:100vw; height:100vh; background:rgba(0,0,0,0.3); z-index:9999; align-items:center; justify-content:center;">
-        <div style="background:#fff; padding:24px; border-radius:8px; min-width:300px;">
+    <div id="editFolderModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>Edit Folder Name</h3>
+            <input type="text" id="editFolderInput" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid #d1d5db;font-size:15px;margin-bottom:18px;margin-top:4px;background:#f9fafb;">
+            <div style="margin-top:16px; text-align:right;">
+                <button onclick="closeEditFolderModal()">Cancel</button>
+                <button id="editFolderActionBtn">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="cloneDomainModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>Clone Domain</h3>
+            <input type="text" id="cloneDomainInput" placeholder="New domain name">
+            <div style="margin-top:16px; text-align:right;">
+                <button onclick="closeCloneDomainModal()">Cancel</button>
+                <button id="cloneDomainActionBtn">Clone</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="copyMoveModal" class="modal-overlay">
+        <div class="modal-content">
             <h3 id="copyMoveTitle"></h3>
             <select id="targetDomainSelect"></select>
             <div style="margin-top:16px; text-align:right;">
@@ -180,6 +202,7 @@
                     <span class="folder-name">${domain}</span>
                     <span class="folder-count">${folder.image_count ?? 0} images</span>
                     <button class="edit-folder-btn" onclick="editFolder(event, '${domain}', ${folder.id})" title="Rename Folder">✏️</button>
+                    <button class="clone-folder-btn" onclick="showCloneDomainModal(${folder.id}, '${domain}')">🗐</button>
                 `;
 
                 folderList.appendChild(folderEl);
@@ -193,25 +216,85 @@
             renderMainContent();
         }
 
+        let currentEditFolderId = null;
+        let currentEditFolderOldName = null;
+
         function editFolder(event, oldDomain, domainId) {
             event.stopPropagation();
-            const newDomain = prompt('Rename folder:', oldDomain);
-            if (!newDomain || newDomain === oldDomain) return;
+            currentEditFolderId = domainId;
+            currentEditFolderOldName = oldDomain;
+            document.getElementById('editFolderInput').value = oldDomain;
+            document.getElementById('editFolderModal').style.display = 'flex';
+            document.getElementById('editFolderActionBtn').onclick = doEditFolder;
+        }
+
+        function closeEditFolderModal() {
+            document.getElementById('editFolderModal').style.display = 'none';
+        }
+
+        function doEditFolder() {
+            const newDomain = document.getElementById('editFolderInput').value.trim();
+            if (!newDomain || newDomain === currentEditFolderOldName) {
+                closeEditFolderModal();
+                return;
+            }
 
             $.ajax({
-                url: `/api/domains/${domainId}`,
+                url: `/api/domains/${currentEditFolderId}`,
                 method: 'PUT',
                 data: { name: newDomain },
                 success: function(response) {
                     showToast('Folder renamed successfully');
+                    
+                    currentFolder = null;
                     fetchDomains();
-                    if (currentFolder === oldDomain) {
-                        currentFolder = newDomain;
-                        renderMainContent();
-                    }
+                    renderMainContent();
+                    closeEditFolderModal();
                 },
                 error: function(error) {
                     showToast('Error renaming folder', 'error');
+                    closeEditFolderModal();
+                }
+            });
+        }
+
+        let currentCloneDomainId = null;
+        let currentCloneDomainOldName = null;
+
+        function showCloneDomainModal(domainId, oldDomain) {
+            currentCloneDomainId = domainId;
+            currentCloneDomainOldName = oldDomain;
+            document.getElementById('cloneDomainInput').value = '';
+            document.getElementById('cloneDomainModal').style.display = 'flex';
+            document.getElementById('cloneDomainActionBtn').onclick = doCloneDomain;
+        }
+
+        function closeCloneDomainModal() {
+            document.getElementById('cloneDomainModal').style.display = 'none';
+        }
+
+        function doCloneDomain() {
+            const newDomain = document.getElementById('cloneDomainInput').value.trim();
+            if (!newDomain) {
+                showToast('Please enter a new domain name', 'error');
+                return;
+            }
+            $.ajax({
+                url: `/api/domains/${currentCloneDomainId}/clone`,
+                method: 'POST',
+                data: { name: newDomain },
+                success: function(response) {
+                    closeCloneDomainModal();
+                    if (response.success) {
+                        showToast('Domain cloned successfully');
+                        fetchDomains();
+                    } else {
+                        showToast('Failed to clone domain', 'error');
+                    }
+                },
+                error: function(error) {
+                    closeCloneDomainModal();
+                    showToast('Failed to clone domain', 'error');
                 }
             });
         }
@@ -249,6 +332,7 @@
                 return;
             }
 
+            console.log('Rendering main content for folder:', currentFolder);
             const folder = folders.find(f => f.name === currentFolder);
 
             mainContent.innerHTML = `

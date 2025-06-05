@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Domain;
 use Aws\S3\S3Client;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class DomainController extends Controller
 {
@@ -43,50 +45,54 @@ class DomainController extends Controller
 
         // Replace dots with dashes in the domain name
         $domainName = str_replace('.', '-', $request->input('name'));
-        
-        $domain = new Domain;
-        $domain->name = $domainName;
-        $domain->status = 'active';
-        $domain->save();
+        $domainName = strtolower($domainName);
 
-        $bucketName = strtolower($domainName);
+        $bucketName = $domainName;
+        // Check if the bucket already exists
+        if ($this->s3->doesBucketExist($bucketName)) {
+            return response()->json([
+                'error' => 'S3 bucket already exists for this domain',
+            ], 400);
+        }
 
         // Create the S3 bucket
         try {
             $this->s3->createBucket(['Bucket' => $bucketName]);
+            $this->s3->putPublicAccessBlock([
+                'Bucket' => $bucketName,
+                'PublicAccessBlockConfiguration' => [
+                    'BlockPublicAcls' => false,
+                    'IgnorePublicAcls' => false,
+                    'BlockPublicPolicy' => false,
+                    'RestrictPublicBuckets' => false,
+                ],
+            ]);
+            $publicPolicy = [
+                'Version' => '2012-10-17',
+                'Statement' => [
+                    [
+                        'Sid' => 'AllowPublicRead',
+                        'Effect' => 'Allow',
+                        'Principal' => '*',
+                        'Action' => 's3:GetObject',
+                        'Resource' => "arn:aws:s3:::$bucketName/*",
+                    ],
+                ],
+            ];
+            $this->s3->putBucketPolicy([
+                'Bucket' => $bucketName,
+                'Policy' => json_encode($publicPolicy),
+            ]);
         } catch (\Exception $e) {
             return response()->json([
                 'error' => 'Failed to create S3 bucket: '.$e->getMessage(),
             ], 500);
         }
 
-        $this->s3->putPublicAccessBlock([
-            'Bucket' => $bucketName,
-            'PublicAccessBlockConfiguration' => [
-                'BlockPublicAcls' => false,
-                'IgnorePublicAcls' => false,
-                'BlockPublicPolicy' => false,
-                'RestrictPublicBuckets' => false,
-            ],
-        ]);
-
-        $publicPolicy = [
-            'Version' => '2012-10-17',
-            'Statement' => [
-                [
-                    'Sid' => 'AllowPublicRead',
-                    'Effect' => 'Allow',
-                    'Principal' => '*',
-                    'Action' => 's3:GetObject',
-                    'Resource' => "arn:aws:s3:::$bucketName/*",
-                ],
-            ],
-        ];
-
-        $this->s3->putBucketPolicy([
-            'Bucket' => $bucketName,
-            'Policy' => json_encode($publicPolicy),
-        ]);
+        $domain = new Domain;
+        $domain->name = $domainName;
+        $domain->status = 'active';
+        $domain->save();
 
         return response()->json([
             'success' => true,
@@ -107,12 +113,39 @@ class DomainController extends Controller
                 'error' => 'Domain not found',
             ], 404);
         }
-    
-        return response()->json([
-            'success' => true,
-            'message' => 'Domain updated successfully',
-            'domain' => $domain,
-        ]);
+
+        $oldBucketName = strtolower($domain->name);
+        $newBucketName = str_replace('.', '-', $request->input('name'));
+        if ($oldBucketName !== $newBucketName) {
+            $this->migrateBucketAndImages($oldBucketName, $newBucketName);
+            $this->destoryBucketAndImages($oldBucketName);
+        }
+
+        DB::beginTransaction();
+        try {
+            $domain->name = $newBucketName;
+            $domain->save();
+
+            foreach ($domain->images as $image) {
+                $image->url = "https://{$newBucketName}.s3.amazonaws.com/images/{$image->name}";
+                $image->thumbnail = "https://{$newBucketName}.s3.amazonaws.com/images/{$image->name}";
+                $image->save();
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Domain updated successfully',
+                'domain' => $domain,
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'error' => 'Failed to update domain: '.$e->getMessage(),
+            ], 500);
+        }
     }
 
     public function destroy($id)
@@ -149,95 +182,181 @@ class DomainController extends Controller
         ]);
     }
 
-    public function migrateBucketAndImages($domainId, $newBucketName)
+    public function clone(Request $request, $id)
     {
-        $domain = Domain::find($domainId);
-        if (!$domain) {
-            return response()->json(['error' => 'Domain not found'], 404);
+        $request->validate([
+            'name' => 'required|string|min:4|max:60|unique:domains,name',
+        ]);
+
+        $domain = Domain::find($id);
+        if (! $domain) {
+            return response()->json([
+                'error' => 'Domain not found',
+            ], 404);
         }
 
-        $oldBucket = strtolower($domain->name);
-        $newBucket = strtolower($newBucketName);
+        $newDomainName = str_replace('.', '-', $request->input('name'));
+        $newDomainName = strtolower($newDomainName);
 
-        // 1. Buat bucket baru
+        $newBucketName = $newDomainName;
+        // Check if the new bucket already exists
+        if ($this->s3->doesBucketExist($newBucketName)) {
+            return response()->json([
+                'error' => 'S3 bucket already exists for this domain',
+            ], 400);
+        }
+
+        // Create the S3 bucket
         try {
-            $this->s3->createBucket(['Bucket' => $newBucket]);
+            $this->s3->createBucket(['Bucket' => $newBucketName]);
             $this->s3->putPublicAccessBlock([
-                'Bucket' => $newBucket,
+                'Bucket' => $newBucketName,
                 'PublicAccessBlockConfiguration' => [
-                    'BlockPublicAcls'       => false,
-                    'IgnorePublicAcls'      => false,
-                    'BlockPublicPolicy'     => false,
+                    'BlockPublicAcls' => false,
+                    'IgnorePublicAcls' => false,
+                    'BlockPublicPolicy' => false,
                     'RestrictPublicBuckets' => false,
                 ],
             ]);
             $publicPolicy = [
-                "Version" => "2012-10-17",
-                "Statement" => [
+                'Version' => '2012-10-17',
+                'Statement' => [
                     [
-                        "Sid" => "AllowPublicRead",
-                        "Effect" => "Allow",
-                        "Principal" => "*",
-                        "Action" => "s3:GetObject",
-                        "Resource" => "arn:aws:s3:::$newBucket/*"
-                    ]
-                ]
+                        'Sid' => 'AllowPublicRead',
+                        'Effect' => 'Allow',
+                        'Principal' => '*',
+                        'Action' => 's3:GetObject',
+                        'Resource' => "arn:aws:s3:::$newBucketName/*",
+                    ],
+                ],
             ];
             $this->s3->putBucketPolicy([
-                'Bucket' => $newBucket,
+                'Bucket' => $newBucketName,
                 'Policy' => json_encode($publicPolicy),
             ]);
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Failed to create new bucket: ' . $e->getMessage()], 500);
+            return response()->json([
+                'error' => 'Failed to create S3 bucket: '.$e->getMessage(),
+            ], 500);
         }
 
-        // 2. Upload semua gambar dari folder lokal ke bucket baru
-        $images = $domain->images;
-        foreach ($images as $image) {
-            // Ambil path file lokal (misal: storage/app/images/namafile.jpg)
-            $localPath = storage_path('app/images/' . $image->name);
-            if (!File::exists($localPath)) continue;
+        $oldBucketName = strtolower($domain->name);
+        $this->migrateBucketAndImages($oldBucketName, $newBucketName);
 
-            try {
-                $result = $this->s3->putObject([
-                    'Bucket' => $newBucket,
-                    'Key'    => 'images/' . $image->name,
-                    'Body'   => fopen($localPath, 'r'),
-                    'ContentType' => File::mimeType($localPath),
-                ]);
-                // Update URL di database jika perlu
-                $image->url = $result['ObjectURL'];
-                $image->save();
-            } catch (\Exception $e) {
-                // Optional: log error, lanjutkan ke file berikutnya
-            }
-        }
-
-        // 3. Hapus bucket lama beserta seluruh isinya
+        DB::beginTransaction();
         try {
-            // List objects in old bucket
-            $objects = $this->s3->listObjectsV2(['Bucket' => $oldBucket]);
-            if (!empty($objects['Contents'])) {
-                foreach ($objects['Contents'] as $obj) {
-                    $this->s3->deleteObject([
-                        'Bucket' => $oldBucket,
-                        'Key'    => $obj['Key'],
-                    ]);
-                }
-            }
-            $this->s3->deleteBucket(['Bucket' => $oldBucket]);
-        } catch (\Exception $e) {
-            // Optional: log error
-        }
+            // Clone the domain
+            $newDomain = $domain->replicate();
+            $newDomain->name = $newDomainName;
+            $newDomain->save();
 
-        // Update nama domain di database
-        $domain->name = $newBucketName;
-        $domain->save();
+            // Clone the images
+            foreach ($domain->images as $image) {
+                $newImage = $image->replicate();
+                $newImage->url = "https://{$newBucketName}.s3.amazonaws.com/images/{$image->name}";
+                $newImage->thumbnail = "https://{$newBucketName}.s3.amazonaws.com/images/{$image->name}";
+                $newImage->domain_id = $newDomain->id;
+                $newImage->save();
+            }
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'error' => 'Failed to clone domain: '.$e->getMessage(),
+            ], 500);
+        }
 
         return response()->json([
             'success' => true,
-            'message' => 'Bucket migrated and images uploaded successfully',
-            'domain' => $domain,
+            'message' => 'Domain copied successfully',
+            'domain' => $newDomain,
         ]);
+    }
+
+    public function migrateBucketAndImages($oldBucketName, $newBucketName)
+    {
+        try {
+            // Check if the old bucket exists
+            if (! $this->s3->doesBucketExist($oldBucketName)) {
+                throw new \Exception("Old bucket does not exist: {$oldBucketName}");
+            }
+
+            // Create the new bucket
+            if (! $this->s3->doesBucketExist($newBucketName)) {
+                $this->s3->createBucket(['Bucket' => $newBucketName]);
+                $this->s3->putPublicAccessBlock([
+                    'Bucket' => $newBucketName,
+                    'PublicAccessBlockConfiguration' => [
+                        'BlockPublicAcls' => false,
+                        'IgnorePublicAcls' => false,
+                        'BlockPublicPolicy' => false,
+                        'RestrictPublicBuckets' => false,
+                    ],
+                ]);
+            }
+
+            $publicPolicy = [
+                'Version' => '2012-10-17',
+                'Statement' => [
+                    [
+                        'Sid' => 'AllowPublicRead',
+                        'Effect' => 'Allow',
+                        'Principal' => '*',
+                        'Action' => 's3:GetObject',
+                        'Resource' => "arn:aws:s3:::$newBucketName/*",
+                    ],
+                ],
+            ];
+            $this->s3->putBucketPolicy([
+                'Bucket' => $newBucketName,
+                'Policy' => json_encode($publicPolicy),
+            ]);
+
+            // Copy objects from the old bucket to the new bucket
+            $objects = $this->s3->listObjectsV2(['Bucket' => $oldBucketName]);
+            if (! empty($objects['Contents'])) {
+                foreach ($objects['Contents'] as $obj) {
+                    $this->s3->copyObject([
+                        'Bucket' => $newBucketName,
+                        'Key' => $obj['Key'],
+                        'CopySource' => "{$oldBucketName}/{$obj['Key']}",
+                    ]);
+                }
+            }
+
+            Log::info("Successfully migrated images from {$oldBucketName} to {$newBucketName}");
+
+            return true;
+        } catch (\Exception $e) {
+            Log::error('Failed to copy images to new bucket: '.$e->getMessage());
+
+            return false;
+        }
+    }
+
+    public function destoryBucketAndImages($bucketName)
+    {
+        try {
+            // Truncate the old bucket (delete all objects)
+            $objects = $this->s3->listObjectsV2(['Bucket' => $bucketName, 'Prefix' => '']);
+            if (! empty($objects['Contents'])) {
+                foreach ($objects['Contents'] as $obj) {
+                    $this->s3->deleteObject([
+                        'Bucket' => $bucketName,
+                        'Key' => $obj['Key'],
+                    ]);
+                }
+            }
+
+            // Delete the old bucket
+            $this->s3->deleteBucket(['Bucket' => $bucketName]);
+            Log::info("Successfully deleted bucket: {$bucketName}");
+
+            return true;
+        } catch (\Exception $e) {
+
+            return false;
+        }
     }
 }
