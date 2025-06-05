@@ -9,7 +9,7 @@
 <body>
     <div class="header">
         <div class="header-content">
-            <h1>Jome Image Manager</h1>
+            <h1>Image Manager</h1>
         </div>
     </div>
 
