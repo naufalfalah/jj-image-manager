@@ -179,7 +179,8 @@ body {
 }
 
 .edit-folder-btn,
-.clone-folder-btn {
+.clone-folder-btn,
+.delete-folder-btn {
     background: none;
     border: none;
     cursor: pointer;
@@ -196,6 +197,9 @@ body {
 }
 .clone-folder-btn:hover {
     color: #38bdf8;
+}
+.delete-folder-btn:hover {
+    color: #f83838;
 }
 
 /* Main Content Styles */
@@ -218,7 +222,7 @@ body {
     color: #6b7280;
 }
 
-.delete-folder-btn {
+/* .delete-folder-btn {
     padding: 10px 16px;
     background: #f16363;
     color: white;
@@ -232,7 +236,7 @@ body {
 
 .delete-folder-btn:hover {
     background: #e54646;
-}
+} */
 
 /* Upload Section */
 .upload-area {

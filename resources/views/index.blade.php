@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Domain Image Manager</title>
     <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 </head>
 <body>
     <div class="header">
@@ -44,22 +45,33 @@
 
     <div id="editFolderModal" class="modal-overlay">
         <div class="modal-content">
-            <h3>Edit Folder Name</h3>
+            <h3>Edit Folder</h3>
             <input type="text" id="editFolderInput" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid #d1d5db;font-size:15px;margin-bottom:18px;margin-top:4px;background:#f9fafb;">
             <div style="margin-top:16px; text-align:right;">
                 <button onclick="closeEditFolderModal()">Cancel</button>
-                <button id="editFolderActionBtn">Save</button>
+                <button id="editFolderActionBtn">Edit</button>
             </div>
         </div>
     </div>
 
     <div id="cloneDomainModal" class="modal-overlay">
         <div class="modal-content">
-            <h3>Clone Domain</h3>
+            <h3>Clone Folder</h3>
             <input type="text" id="cloneDomainInput" placeholder="New domain name">
             <div style="margin-top:16px; text-align:right;">
                 <button onclick="closeCloneDomainModal()">Cancel</button>
                 <button id="cloneDomainActionBtn">Clone</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="deleteFolderModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>Delete Folder</h3>
+            <p>Are you sure you want to delete the folder "<span id="deleteFolderName"></span>"?</p>
+            <div style="margin-top:16px; text-align:right;">
+                <button onclick="closeDeleteDomainModal()">Cancel</button>
+                <button id="confirmDeleteFolderBtn">Delete</button>
             </div>
         </div>
     </div>
@@ -150,7 +162,7 @@
                     } else {
                         showToast('Error creating folder', 'error');
                         return;
-                    }   
+                    }
                 },
                 error: function(error) {
                     console.error('Error creating folder:', error);
@@ -203,9 +215,18 @@
                         <span class="folder-name" title="${domain}">${domain}</span>
                     </div>
                     <div class="folder-row-2">
-                        <span class="folder-count">${folder.image_count ?? 0} images</span>
-                        <button class="edit-folder-btn" onclick="editFolder(event, '${domain}', ${folder.id})" title="Rename Folder">✏️</button>
-                        <button class="clone-folder-btn" onclick="showCloneDomainModal(${folder.id}, '${domain}')">🗐</button>
+                        <span class="folder-count">${folder.images_count ?? 0} images</span>
+
+                        <button class="edit-folder-btn" onclick="editFolder(event, '${domain}', ${folder.id})" title="Rename Folder">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        ${folder.images_count ?
+                        `<button class="clone-folder-btn" onclick="showCloneDomainModal(${folder.id}, '${domain}')">
+                            <i class="fas fa-copy"></i>
+                        </button>` : ``}
+                        <button class="delete-folder-btn" onclick="showDeleteDomainModal(${folder.id}, '${domain}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
                     </div>
                 `;
 
@@ -220,6 +241,7 @@
             renderMainContent();
         }
 
+        // Edit folder name
         let currentEditFolderId = null;
         let currentEditFolderOldName = null;
 
@@ -249,19 +271,25 @@
                 data: { name: newDomain },
                 success: function(response) {
                     showToast('Folder renamed successfully');
-                    
+
                     currentFolder = null;
                     fetchDomains();
                     renderMainContent();
                     closeEditFolderModal();
                 },
                 error: function(error) {
-                    showToast('Error renaming folder', 'error');
+                    let errorMessage = 'Error renaming folder';
+                    if (error.responseJSON && error.responseJSON.message) {
+                        errorMessage = error.responseJSON.message;
+                    }
+
+                    showToast(errorMessage, 'error');
                     closeEditFolderModal();
                 }
             });
         }
 
+        // Clone domain
         let currentCloneDomainId = null;
         let currentCloneDomainOldName = null;
 
@@ -289,35 +317,59 @@
                 data: { name: newDomain },
                 success: function(response) {
                     closeCloneDomainModal();
-                    if (response.success) {
-                        showToast('Domain cloned successfully');
-                        fetchDomains();
-                    } else {
-                        showToast('Failed to clone domain', 'error');
-                    }
+                    showToast('Domain cloned successfully');
+                    fetchDomains();
                 },
                 error: function(error) {
+                    let errorMessage = 'Failed to clone domain';
+                    if (error.responseJSON && error.responseJSON.message) {
+                        errorMessage = error.responseJSON.message;
+                    }
+
+                    showToast(errorMessage, 'error');
                     closeCloneDomainModal();
-                    showToast('Failed to clone domain', 'error');
                 }
             });
         }
 
+        // Delete folder
+        let currentDeleteFolderId = null;
+        let currentDeleteFolderName = null;
+
+        function showDeleteDomainModal(domainId, domain) {
+            currentDeleteFolderId = domainId;
+            currentDeleteFolderName = domain;
+            document.getElementById('deleteFolderName').textContent = domain;
+            document.getElementById('confirmDeleteFolderBtn').onclick = deleteFolder;
+            document.getElementById('deleteFolderModal').style.display = 'flex';
+        }
+
+        function closeDeleteDomainModal() {
+            const modal = document.getElementById('deleteFolderModal');
+            modal.style.display = 'none';
+        }
+
         function deleteFolder(domainId, domain) {
-            if (!confirm(`Are you sure you want to delete the folder "${domain}"?`)) return;
+            if (!currentDeleteFolderId) return;
 
             $.ajax({
-                url: `/api/domains/${domainId}`,
+                url: `/api/domains/${currentDeleteFolderId}`,
                 method: 'DELETE',
                 success: function(response) {
                     currentFolder = null;
                     fetchDomains();
                     renderMainContent();
                     showToast(`Folder deleted successfully`);
+                    closeDeleteDomainModal();
                 },
                 error: function(error) {
-                    console.error('Error deleting folder:', error);
-                    showToast('Error deleting folder', 'error');
+                    let errorMessage = 'Failed to delete domain';
+                    if (error.responseJSON && error.responseJSON.message) {
+                        errorMessage = error.responseJSON.message;
+                    }
+
+                    showToast(errorMessage, 'error');
+                    closeDeleteDomainModal();
                 }
             });
         }
@@ -341,11 +393,10 @@
             mainContent.innerHTML = `
                 <div class="folder-header">
                     <h2 class="folder-title">${currentFolder}</h2>
-                    <button class="delete-folder-btn" onclick="deleteFolder(${folder.id}, '${currentFolder}')">Delete Folder</button>
                 </div>
-                <div class="upload-area" id="uploadArea" 
-                     ondrop="handleDrop(event)" 
-                     ondragover="handleDragOver(event)" 
+                <div class="upload-area" id="uploadArea"
+                     ondrop="handleDrop(event)"
+                     ondragover="handleDragOver(event)"
                      ondragleave="handleDragLeave(event)">
                     <h3 class="upload-title">Upload Images to ${currentFolder}</h3>
                     <p class="upload-subtitle">Drag and drop images here or click to select</p>
@@ -358,7 +409,7 @@
                 <div class="images-section">
                     <h3 class="section-title">Uploaded Images</h3>
                 </div>
-                ${folder.images_count === 0 ?
+                ${!folder.images_count || folder.images_count === 0 ?
                     '<div class="empty-images">No images uploaded yet</div>' : ''
                 }
                 <div class="image-grid">
@@ -486,6 +537,11 @@
                 setTimeout(() => progressBar.remove(), 800);
 
                 if (response.data.success) {
+                    const emptyImages = document.querySelector('.empty-images');
+                    if (emptyImages) {
+                        emptyImages.remove();
+                    }
+
                     const images = response.data.images;
                     const imageGrid = document.querySelector('.image-grid');
                     images.forEach(image => {
@@ -498,7 +554,7 @@
 
                     const folder = folders.find(f => f.name === currentFolder);
                     if (folder) {
-                        folder.image_count = (folder.image_count || 0) + images.length;
+                        folder.images_count = (folder.images_count || 0) + images.length;
                         renderFolders();
                     }
                     showToast('Images uploaded successfully');
@@ -524,7 +580,7 @@
                 }
                 const formData = new FormData();
                 formData.append('files[]', files[0]);
-                
+
                 $.ajax({
                     url: `/api/domains/images/${imageId}`,
                     method: 'POST',
@@ -559,10 +615,10 @@
                     showToast('Image deleted successfully');
                     const card = btn.closest('.image-card');
                     if (card) card.remove();
-                    
+
                     const folder = folders.find(f => f.name === currentFolder);
-                    if (folder && folder.image_count > 0) {
-                        folder.image_count -= 1;
+                    if (folder && folder.images_count > 0) {
+                        folder.images_count -= 1;
                         renderFolders();
                     }
                 },
@@ -572,6 +628,7 @@
             });
         }
 
+        // Copy/Move Image
         let currentCopyMoveImageId = null;
         let currentCopyMoveAction = null;
         let currentImageCard = null;
@@ -605,12 +662,12 @@
                 success: function(response) {
                     closeCopyMoveModal();
                     showToast(`Image ${currentCopyMoveAction}d successfully`);
-                    
+
                     // Refresh image grid & sidebar count
                     if (currentCopyMoveAction === 'move') {
                         const folder = folders.find(f => f.name === currentFolder);
-                        if (folder && folder.image_count > 0) {
-                            folder.image_count -= 1;
+                        if (folder && folder.images_count > 0) {
+                            folder.images_count -= 1;
                             renderFolders();
                         }
                         const card = currentImageCard.closest('.image-card');
@@ -618,14 +675,20 @@
                     }
 
                     const targetFolder = folders.find(f => f.name === targetDomain);
-                    if (targetFolder) {
-                        targetFolder.image_count = (targetFolder.image_count || 0) + 1;
+                    console.log('targetFolder', targetFolder);
+                    if (targetFolder && !response.overwrite) {
+                        targetFolder.images_count = (targetFolder.images_count || 0) + 1;
                         renderFolders();
                     }
                 },
                 error: function(error) {
+                    let errorMessage = 'Failed to copy image';
+                    if (error.responseJSON && error.responseJSON.message) {
+                        errorMessage = error.responseJSON.message;
+                    }
+
+                    showToast(errorMessage, 'error');
                     closeCopyMoveModal();
-                    showToast(`Failed to ${currentCopyMoveAction} image`, 'error');
                 }
             });
         }
