@@ -149,24 +149,23 @@
                 method: 'POST',
                 data: { name: domain },
                 success: function(response) {
-                    if (response.success) {
-                        folders.push({
-                            name: response.domain.name,
-                            images: [],
-                            createdAt: new Date().toISOString()
-                        });
-                        input.value = '';
-                        renderFolders();
-                        selectFolder(domain);
-                        showToast(`Folder "${domain}" created successfully`);
-                    } else {
-                        showToast('Error creating folder', 'error');
-                        return;
-                    }
+                    folders.push({
+                        name: response.domain.name,
+                        images: [],
+                        createdAt: new Date().toISOString()
+                    });
+                    input.value = '';
+                    renderFolders();
+                    selectFolder(domain);
+                    showToast(`Folder "${domain}" created successfully`);
                 },
                 error: function(error) {
-                    console.error('Error creating folder:', error);
-                    showToast('Error creating folder', 'error');
+                    let errorMessage = 'Error creating folder';
+                    if (error.responseJSON && error.responseJSON.message) {
+                        errorMessage = error.responseJSON.message;
+                    }
+
+                    showToast(errorMessage, 'error');
                 }
             });
         }
@@ -260,10 +259,10 @@
 
         function doEditFolder() {
             const newDomain = document.getElementById('editFolderInput').value.trim();
-            if (!newDomain || newDomain === currentEditFolderOldName) {
-                closeEditFolderModal();
-                return;
-            }
+            // if (!newDomain || newDomain === currentEditFolderOldName) {
+            //     closeEditFolderModal();
+            //     return;
+            // }
 
             $.ajax({
                 url: `/api/domains/${currentEditFolderId}`,
@@ -588,14 +587,10 @@
                     processData: false,
                     contentType: false,
                     success: function(response) {
-                        if (response.success) {
-                            const imageGrid = document.querySelector('.image-grid');
-                            imageGrid.innerHTML = '';
-                            fetchDomainImages(currentFolder);
-                            showToast('Image updated successfully. Thumbnails refresh will take a moment.');
-                        } else {
-                            showToast('Error uploading images', 'error');
-                        }
+                        const imageGrid = document.querySelector('.image-grid');
+                        imageGrid.innerHTML = '';
+                        fetchDomainImages(currentFolder);
+                        showToast('Image updated successfully. Thumbnails refresh will take a moment.');
                     },
                     error: function(error) {
                         showToast('Error updating image', 'error');

@@ -29,7 +29,14 @@ class DomainController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'name' => 'required|string|min:4|max:60|unique:domains,name',
+            'name' => [
+                'required',
+                'string',
+                'min:3',
+                'max:63',
+                'regex:/^(?!\d+\.\d+\.\d+\.\d+$)(?!xn--)[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$/',
+                'unique:domains,name',
+            ],
         ]);
 
         $domainName = formatBucketName($request->input('name'));
@@ -53,22 +60,37 @@ class DomainController extends Controller
     public function update(Request $request, $id)
     {
         $request->validate([
-            'name' => 'required|string|min:4|max:60|unique:domains,name,'.$id,
+            'name' => [
+                'required',
+                'string',
+                'min:3',
+                'max:63',
+                'regex:/^(?!\d+\.\d+\.\d+\.\d+$)(?!xn--)[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$/',
+                'unique:domains,name,'.$id,
+            ],
         ]);
 
         $domain = Domain::find($id);
         if (! $domain) {
             return response()->json([
-                'error' => 'Domain not found',
+                'message' => 'Domain not found',
             ], 404);
         }
 
         $oldBucketName = $domain->name;
         $newBucketName = formatBucketName($request->input('name'));
-        if ($oldBucketName !== $newBucketName) {
-            $this->s3Service->copyAllObject($oldBucketName, $newBucketName);
-            $this->s3Service->deleteBucket($oldBucketName);
+        if ($oldBucketName === $newBucketName) {
+            return response()->json([
+                'message' => 'The domain name is the same as the current one.',
+            ], 400);
         }
+
+        if (! $this->s3Service->checkBucketExists($newBucketName)) {
+            $this->s3Service->createBucket($newBucketName);
+        }
+
+        $this->s3Service->copyAllObject($oldBucketName, $newBucketName);
+        $this->s3Service->deleteBucket($oldBucketName);
 
         DB::beginTransaction();
         try {
@@ -122,7 +144,14 @@ class DomainController extends Controller
     public function clone(Request $request, $id)
     {
         $request->validate([
-            'name' => 'required|string|min:4|max:60|unique:domains,name',
+            'name' => [
+                'required',
+                'string',
+                'min:3',
+                'max:63',
+                'regex:/^(?!\d+\.\d+\.\d+\.\d+$)(?!xn--)[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$/',
+                'unique:domains,name',
+            ],
         ]);
 
         $domain = Domain::find($id);
@@ -158,6 +187,12 @@ class DomainController extends Controller
             }
 
             DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Domain copied successfully',
+                'domain' => $newDomain,
+            ]);
         } catch (\Exception $e) {
             DB::rollBack();
 
@@ -165,11 +200,5 @@ class DomainController extends Controller
                 'error' => 'Failed to clone domain: '.$e->getMessage(),
             ], 500);
         }
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Domain copied successfully',
-            'domain' => $newDomain,
-        ]);
     }
 }

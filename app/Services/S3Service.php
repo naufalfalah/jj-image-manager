@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Aws\S3\S3Client;
+use Illuminate\Support\Facades\Log;
 
 class S3Service
 {
@@ -25,6 +26,7 @@ class S3Service
         try {
             return $this->s3->doesBucketExist($bucketName);
         } catch (\Exception $e) {
+            Log::error('Failed to check if bucket exists: '.$e->getMessage());
             throw new \Exception('Failed to check if bucket exists: '.$e->getMessage());
         }
     }
@@ -61,6 +63,10 @@ class S3Service
                 'Policy' => json_encode($publicPolicy),
             ]);
         } catch (\Exception $e) {
+            Log::error('Failed to create bucket: '.$e->getMessage());
+            if (strpos($e->getMessage(), 'BucketAlreadyExists') !== false) {
+                throw new \Exception('The requested bucket name is not available. Please choose a different name.');
+            }
             throw new \Exception('Failed to create bucket: '.$e->getMessage());
         }
     }
@@ -84,6 +90,7 @@ class S3Service
             // Delete the bucket
             $this->s3->deleteBucket(['Bucket' => $bucketName]);
         } catch (\Exception $e) {
+            Log::error('Failed to delete bucket: '.$e->getMessage());
             throw new \Exception('Failed to delete bucket: '.$e->getMessage());
         }
     }
@@ -97,6 +104,7 @@ class S3Service
                 return $bucket['Name'];
             }, $buckets['Buckets']);
         } catch (\Exception $e) {
+            Log::error('Failed to list buckets: '.$e->getMessage());
             throw new \Exception('Failed to list buckets: '.$e->getMessage());
         }
     }
@@ -106,6 +114,7 @@ class S3Service
         try {
             return $this->s3->doesObjectExist($bucketName, $key);
         } catch (\Exception $e) {
+            Log::error('Failed to check if object exists: '.$e->getMessage());
             throw new \Exception('Failed to check if object exists: '.$e->getMessage());
         }
     }
@@ -115,6 +124,7 @@ class S3Service
         try {
             return $this->s3->getObjectUrl($bucketName, $key);
         } catch (\Exception $e) {
+            Log::error('Failed to get file URL: '.$e->getMessage());
             throw new \Exception('Failed to get file URL: '.$e->getMessage());
         }
     }
@@ -131,6 +141,7 @@ class S3Service
 
             return $result['ObjectURL'];
         } catch (\Exception $e) {
+            Log::error('Failed to upload file to S3: '.$e->getMessage());
             throw new \Exception('Failed to upload file to S3: '.$e->getMessage());
         }
     }
@@ -146,6 +157,7 @@ class S3Service
 
             return $result['ObjectURL'];
         } catch (\Exception $e) {
+            Log::error('Failed to copy object: '.$e->getMessage());
             throw new \Exception('Failed to copy object: '.$e->getMessage());
         }
     }
@@ -164,6 +176,7 @@ class S3Service
                 }
             }
         } catch (\Exception $e) {
+            Log::error('Failed to copy all objects: '.$e->getMessage());
             throw new \Exception('Failed to copy object: '.$e->getMessage());
         }
     }
@@ -176,6 +189,7 @@ class S3Service
                 'Key' => $key,
             ]);
         } catch (\Exception $e) {
+            Log::error('Failed to delete object: '.$e->getMessage());
             throw new \Exception('Failed to delete object: '.$e->getMessage());
         }
     }
